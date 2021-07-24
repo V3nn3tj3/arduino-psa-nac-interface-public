@@ -18,12 +18,9 @@
 
 StorageClass::StorageClass() {
   loadFromStorage();
-  if (storage.version != 1) {
-    storage = { 1, { 0, 0, 0, 1, 1, 2021}, LanguageID, (LanguageID * 4) + 128, C, Lkm};
+  if (storage.version != 4) {
+    storage = { 4, { 0, 0, 0, 1, 1, 2021}, { 0, 0, 0, 1, 1, 2020}, 6, C, km, VolFor100Units, l};
     saveToStorage();
-  }
-  if (!storage.languageAndUnit) {
-    storage.languageAndUnit = (LanguageID * 4) + 0x80;
   }
 }
 
@@ -43,6 +40,10 @@ void StorageClass::setDateTime(DateTime value) {
   saveToStorage();
 }
 
+DateTime StorageClass::getStartDateTime(){
+  return storage.startDateTime;
+}
+
 byte StorageClass::getLanguageId() {
   return storage.languageId;
 }
@@ -51,27 +52,35 @@ void StorageClass::setLanguageId(byte value) {
   saveToStorage();
 }
 
-byte StorageClass::getLanguageAndUnit() {
-  return storage.languageAndUnit;
+TemperatureUnitValues StorageClass::getTemperatureUnit() {
+  return storage.temperatureUnit;
 }
-void StorageClass::setLanguageAndUnit(byte value) {
-  storage.languageAndUnit = value;
+void StorageClass::setTemperatureUnit(TemperatureUnitValues value) {
+  storage.temperatureUnit = value;
   saveToStorage();
 }
 
-TemperatureReadingValues StorageClass::getTemperatureReading() {
-  return storage.temperatureReading;
+DistanceUnitValues StorageClass::getDistanceUnit() {
+  return storage.distanceUnit;
 }
-void StorageClass::setTemperatureReading(TemperatureReadingValues value) {
-  storage.temperatureReading = value;
+void StorageClass::setDistanceUnit(DistanceUnitValues value) {
+  storage.distanceUnit = value;
   saveToStorage();
 }
 
-FuelStatValues StorageClass::getFuelStat() {
-  return storage.fuelStat;
+ConsumptionUnitValues StorageClass::getConsumptionUnit() {
+  return storage.consumptionUnit;
 }
-void StorageClass::setFuelStat(FuelStatValues value) {
-  storage.fuelStat = value;
+void StorageClass::setConsumptionUnit(ConsumptionUnitValues  value) {
+  storage.consumptionUnit = value;
+  saveToStorage();
+}
+
+VolumeUnitValues StorageClass::getVolumeUnit() {
+  return storage.volumeUnit;
+}
+void StorageClass::setVolumeUnit(VolumeUnitValues value) {
+  storage.volumeUnit = value;
   saveToStorage();
 }
 

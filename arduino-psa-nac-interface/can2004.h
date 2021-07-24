@@ -17,12 +17,13 @@
 #ifndef CAN2004_H
 #define CAN2004_H
 
-#include <CAN.h>
+#include "configuration.h"
 #include "canmessage.h"
+#include <mcp2515.h>
 
 class Can2004Class {
   private:
-    MCP2515Class CAN1;
+    MCP2515* CAN1;
     void process(can_message *message);
 
     //Helpers
@@ -33,6 +34,7 @@ class Can2004Class {
   protected:
   public:
     void receive();
+    void setupCan();
     void send(can_message *message);
     Can2004Class();
     void send0x122();
@@ -40,6 +42,7 @@ class Can2004Class {
     void send0x236();
     void send0x276();
     void send0x350();
+    void send0x361();
 };
 
 extern Can2004Class Can2004;

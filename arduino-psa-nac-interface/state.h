@@ -18,6 +18,7 @@
 #define STATE_H
 
 #include <Arduino.h>
+#include "canmessage.h"
 
 class StateClass {
   public:
@@ -44,6 +45,8 @@ class StateClass {
     void setDebounceDelay(unsigned long value);
     byte getScrollValue();
     void setScrollValue(byte value);
+    can_message* getMessage15B();
+    can_message* getMessage361();
   protected:
   private:
     bool economyMode = false;
@@ -57,6 +60,8 @@ class StateClass {
     unsigned long buttonSendTime = 0;
     unsigned long debounceDelay = 100;
     byte scrollValue = 0;
+    can_message* message15B = new can_message();
+    can_message* message361 = new can_message();
 };
 
 extern StateClass State;

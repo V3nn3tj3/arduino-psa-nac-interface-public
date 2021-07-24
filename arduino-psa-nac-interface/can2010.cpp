@@ -18,113 +18,101 @@
 #include "canmessage.h"
 #include "configuration.h"
 #include "state.h"
-#include <CAN.h>
+#include <mcp2515.h>
 #include <DS3232RTC.h>
 
 Can2010Class::Can2010Class() {
-  CAN2.setPins(CS_PIN_CAN2, 2);
-  CAN2.setClockFrequency(CAN_FREQ);
-  CAN2.begin(CAN_SPEED);
+}
+
+void Can2010Class::setupCan() {
+#if SERIAL_ENABLED
+  Serial.println(F("Initialize CAN 2010"));
+#endif
+  CAN2 = new MCP2515(CS_PIN_CAN2);
+  CAN2->reset();
+  CAN2->setBitrate(CAN_SPEED, CAN_FREQ);
+  while (CAN2->setNormalMode() != MCP2515::ERROR_OK) {
+    delay(100);
+  }
 }
 
 void Can2010Class::send(can_message *message) {
-  if (message->len > 0) {
-    CAN2.beginPacket(message->id, message->len);// or CAN.beginExtendedPacket(0x18db33f1, 8);
-    for (int i = 0; i < message->len; i++) {
-      CAN2.write(message->data[i]);
-    }
-    CAN2.endPacket();
-  }
+  CAN2->sendMessage(message);
 #if SERIAL_ENABLED
-  Serial.print("CAN2010 SEND    FRAME:ID=");
-  char tmp[4];
-  snprintf(tmp, 4, "%03X", message->id);
-  Serial.print(tmp);
-  Serial.print(":LEN=");
-  Serial.print(message->len);
-  for (int i = 0; i < message->len; i++) {
-    Serial.print(":");
-    snprintf(tmp, 3, "%02X", message->data[i]);
+  if (message->can_id == 0x260) {
+    Serial.print(F("CAN2010 SEND    FRAME:ID="));
+    char tmp[4];
+    snprintf(tmp, 4, "%03X", message->can_id);
     Serial.print(tmp);
+    Serial.print(F(":LEN="));
+    Serial.print(message->can_dlc);
+    for (int i = 0; i < message->can_dlc; i++) {
+      Serial.print(F(":"));
+      snprintf(tmp, 3, "%02X", message->data[i]);
+      Serial.print(tmp);
+    }
+    Serial.println();
   }
-  Serial.println();
 #endif
 }
 
 void Can2010Class::receive() {
-  int packetSize = CAN2.parsePacket();
-
-  if (packetSize && packetSize <= 8) {
-    struct can_message message;
-
-    message.id = CAN2.packetId();
-    if (!CAN2.packetRtr()) {
-      //Serial.print(" and requested length ");
-      //Serial.println(CAN.packetDlc());
-      //} else {
-      //Serial.print(" and length ");
-      message.len = packetSize;
-      byte packetIndex = 0;
-      while (CAN2.available()) {
-        message.data[packetIndex++] = CAN2.read();
-      }
-#if SERIAL_ENABLED
-      Serial.print("CAN2010 RECEIVE FRAME:ID=");
-      Serial.print(message.id);
-      Serial.print(":LEN=");
-      Serial.print(message.len);
-      char tmp[3];
-      for (int i = 0; i < message.len; i++) {
-        Serial.print(":");
-        snprintf(tmp, 3, "%02X", message.data[i]);
-        Serial.print(tmp);
-      }
-      Serial.println();
-#endif
-      process(&message);
+  struct can_message message;
+  if (CAN2->readMessage(&message) == MCP2515::ERROR_OK) {
+    process(&message);
+#if SERIAL_ENABLED_CAN
+    Serial.print(F("CAN2010 RECEIVE FRAME:ID="));
+    Serial.print(message.can_id);
+    Serial.print(F(":LEN="));
+    Serial.print(message.can_dlc);
+    char tmp[3];
+    for (int i = 0; i < message.can_dlc; i++) {
+      Serial.print(F(":"));
+      snprintf(tmp, 3, "%02X", message.data[i]);
+      Serial.print(tmp);
     }
-#if SERIAL_ENABLED
-  } else if (packetSize) {
-    Serial.print("CAN2010 RECEIVE FRAME::ID=");
-    Serial.print(CAN2.packetId());
-    Serial.println(":WRONG PACKET");
+    Serial.println();
 #endif
   }
 }
 
 void Can2010Class::process(can_message *message) {
-  switch (message->id) {
+  switch (message->can_id) {
     case 0x39B: {
-        setTime(message->data[4], message->data[3], 0, message->data[2], message->data[1], message->data[0] + 1872);
+        setTime(message->data[3], message->data[4], 0, message->data[2], message->data[1], message->data[0] + 1872);
         RTC.set(now()); // Set the time on the RTC module too
-        Configuration.setDateTime({ message->data[4], message->data[3], 0, message->data[2], message->data[1], message->data[0] + 1872 });
+        Configuration.setDateTime({ message->data[3], message->data[4], 0, message->data[2], message->data[1], message->data[0] + 1872 });
 
         struct can_message new_message;
         new_message.data[0] = hour();
         new_message.data[1] = minute();
-        new_message.id = 0x228;
-        new_message.len = 2;
+        new_message.can_id = 0x228;
+        new_message.can_dlc = 2;
         Can2004.send(&new_message);
       } break;
     case 0x15B: {
         //Update required to include LanguageId, also use bit from byte
         if (message->getFromByteBitOnPosition(0, 7)) {
-          Configuration.setLanguageAndUnit(message->data[0]);
-          if (message->getFromByteBitOnPosition(1, 7)) {
-            Configuration.setFuelStat(FuelStatValues::mpgMi);
+          Configuration.setLanguageId(message->getFromByteBitsStartingFromFor(0, 3, 4));
+          if (message->getFromByteBitOnPosition(1, 1)) {
+            Configuration.setDistanceUnit(DistanceUnitValues::mi);
           } else {
-            Configuration.setFuelStat(FuelStatValues::Lkm);
+            Configuration.setDistanceUnit(DistanceUnitValues::km);
+          }
+          if (message->getFromByteBitOnPosition(1, 0)) {
+            Configuration.setConsumptionUnit(ConsumptionUnitValues::DistanceForUnit);
+          } else {
+            Configuration.setConsumptionUnit(ConsumptionUnitValues::VolFor100Units);
+          }
+          if (message->getFromByteBitOnPosition(1, 7)) {
+            Configuration.setVolumeUnit(VolumeUnitValues::l);
+          } else {
+            Configuration.setVolumeUnit(VolumeUnitValues::gal);
           }
           if (message->getFromByteBitOnPosition(1, 6)) {
-            Configuration.setTemperatureReading(TemperatureReadingValues::F);
+            Configuration.setTemperatureUnit(TemperatureUnitValues::F);
           } else {
-            Configuration.setTemperatureReading(TemperatureReadingValues::C);
-          }
-        } else {
-          if (message->getFromByteBitOnPosition(1, 7)) {
-            Configuration.setLanguageId(ceil(message->data[1] / 4.0) - 1);
-          } else {
-            Configuration.setLanguageId(ceil(message->data[1] / 4.0));
+            Configuration.setTemperatureUnit(TemperatureUnitValues::C);
           }
         }
       } break;
@@ -194,8 +182,8 @@ void Can2010Class::process(can_message *message) {
         // Mediums ?
         new_message.data[3] = 63; // 0x3F = 63
 
-        new_message.id = message->id;
-        new_message.len = message->len;
+        new_message.can_id = message->can_id;
+        new_message.can_dlc = message->can_dlc;
         Can2004.send(&new_message);
       } break;
     default:
@@ -210,44 +198,121 @@ void Can2010Class::send0x228() {
   struct can_message new_message;
   new_message.data[0] = hour();
   new_message.data[1] = minute();
-  new_message.id = 0x228;
-  new_message.len = 2;
+  new_message.can_id = 0x228;
+  new_message.can_dlc = 2;
   Can2004.send(&new_message);
 }
+
+void Can2010Class::send0x167() {
+  struct can_message new_message;
+  new_message.data[0] = 0x08;//0x00;
+  new_message.data[1] = 0x10;//0x06;
+  new_message.data[2] = 0xFF;
+  new_message.data[3] = 0xFF;
+  new_message.data[4] = 0x7F;
+  new_message.data[5] = 0xFF;
+  new_message.data[6] = 0x00;
+  new_message.data[7] = 0x00;
+  new_message.can_id = 0x167;
+  new_message.can_dlc = 8;
+  Can2004.send(&new_message);
+}
+
 //Send every 1000ms - Seen on car network
 //Unfinished frame, need research
 void Can2010Class::send0x3f6() {
   struct can_message new_message;
-  unsigned long secondsInDay = hour() * 3600 + minute() * 60 + second();
-  secondsInDay = secondsInDay << 4;
-  new_message.data[0] = (secondsInDay >> (8 * 2)) & 0xff;
-  new_message.data[1] = (secondsInDay >> (8 * 1)) & 0xff;
-  new_message.data[2] = (secondsInDay >> (8 * 0)) & 0xff;
-  new_message.data[3] = 0x00;
-  new_message.data[4] = 0x00;
+  unsigned long secondsInDay = Configuration.getSecondsFromDay();
+
+  new_message.data[0] = (((1 << 8) - 1) & (secondsInDay >> (12)));
+  new_message.data[1] = (((1 << 8) - 1) & (secondsInDay >> (4)));
+  new_message.data[2] = (((((1 << 4) - 1) & (secondsInDay)) << 4)) + (((1 << 4) - 1) & (Configuration.getDayOfYear() >> (8)));
+  new_message.data[3] = (((1 << 8) - 1) & (Configuration.getDayOfYear()));
+  new_message.data[4] = Configuration.getYearsRunning();
 
   new_message.data[5] = 0x00;
-  if (DistanceUnit == "Mi") {
+
+  if (Configuration.getDistanceUnit() == DistanceUnitValues::mi) {
     new_message.setInByteBitOnPosition(5, 0, 1);
   }
-  if (VolumeUnit == "Gal") {
+  if (Configuration.getVolumeUnit() == VolumeUnitValues::gal) {
     new_message.setInByteBitOnPosition(5, 1, 1);
   }
-  if (Configuration.getFuelStat() == FuelStatValues::mpgMi) {
+  if (Configuration.getConsumptionUnit() == ConsumptionUnitValues::DistanceForUnit) {
     new_message.setInByteBitOnPosition(5, 2, 1);
   }
-  if (PressureUnit == "Psi") {
+  if (strcmp(PressureUnit, "Psi") == 0) {
     new_message.setInByteBitOnPosition(5, 3, 1);
   }
   new_message.setInByteBitOnPosition(5, 4, 1);
-  if (Configuration.getTemperatureReading() == TemperatureReadingValues::F) {
+  if (Configuration.getTemperatureUnit() == TemperatureUnitValues::F) {
     new_message.setInByteBitOnPosition(5, 5, 1);
   }
   new_message.setInByteBitOnPosition(5, 7, 1);
   new_message.data[6] = Configuration.getLanguageId();
-  new_message.id = 0x3f6;
-  new_message.len = 7;
+  new_message.can_id = 0x3f6;
+  new_message.can_dlc = 7;
   Can2004.send(&new_message);
+}
+
+void Can2010Class::send0x525() {
+  struct can_message new_message;
+  new_message.data[0] = 0x00;
+  new_message.data[1] = 0x00;
+  new_message.data[2] = 0x00;
+  new_message.data[3] = 0x00;
+  new_message.data[4] = 0x00;
+  new_message.data[5] = 0x00;
+  new_message.data[6] = 0x00;
+  new_message.data[7] = 0x00;
+  new_message.can_id = 0x525;
+  new_message.can_dlc = 8;
+  Can2004.send(&new_message);
+}
+
+void Can2010Class::send0x15B() {
+  //if (State.getMessage15B()->data[0] != 0x00) {
+  //  Can2004.send(State.getMessage15B());
+  //}
+}
+
+void Can2010Class::setupVersion() {
+  struct can_message new_message;
+  new_message.data[0] = 0x25;
+  new_message.data[1] = 0x1D;
+  new_message.data[2] = 0x03;
+  new_message.data[3] = 0x06;
+  new_message.data[4] = 0x08;
+  new_message.data[5] = 0x00;
+  new_message.data[6] = 0x20;
+  new_message.data[7] = 0x10;
+  new_message.can_id = 0x5E5;
+  new_message.can_dlc = 8;
+  Can2004.send(&new_message);
+  new_message.data[0] = 0x58;
+  new_message.data[1] = 0xF8;
+  new_message.data[2] = 0xEB;
+  new_message.data[3] = 0x80;
+  new_message.data[4] = 0x01;
+  new_message.data[5] = 0x02;
+  new_message.data[6] = 0x05;
+  new_message.data[7] = 0x07;
+  new_message.can_id = 0x4A5;
+  new_message.can_dlc = 8;
+  /*
+    Can2004.send(&new_message);
+    new_message.data[0] = 0x05;
+    new_message.data[1] = 0x00;
+    new_message.data[2] = 0x00;
+    new_message.data[3] = 0x00;
+    new_message.data[4] = 0x00;
+    new_message.data[5] = 0x00;
+    new_message.data[6] = 0x00;
+    new_message.data[7] = 0xF0;
+    new_message.can_id = 0x15B;
+    new_message.can_dlc = 8;
+    Can2004.send(&new_message);
+  */
 }
 
 //Display

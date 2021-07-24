@@ -18,18 +18,18 @@
 #define CONFIGURATION_H
 
 #include "storage.h"
+#include <mcp2515.h>
 
 #define SERIAL_ENABLED false
+#define SERIAL_ENABLED_CAN false
 #define CS_PIN_CAN1 10
 #define CS_PIN_CAN2 9
-#define SERIAL_SPEED 115200
-#define CAN_SPEED 125E3 // Entertainment CAN bus - Low speed
-#define CAN_FREQ 8e6
+#define SERIAL_SPEED 250000
+#define CAN_SPEED CAN_125KBPS // Entertainment CAN bus - Low speed
+#define CAN_FREQ MCP_8MHZ
 
-#define EconomyModeEnabled true
+#define EconomyModeEnabled false
 #define ForceBrightness false
-#define DistanceUnit "Km" //Km, Mi
-#define VolumeUnit "L" //L, Gal
 #define PressureUnit "Bar" //Bar, Psi
 
 #define HasAnalogButtons true
@@ -47,14 +47,20 @@ class ConfigurationClass {
     char getVINNumberChar(byte index);
     byte getLanguageId();
     void setLanguageId(byte value);
-    byte getLanguageAndUnit();
-    void setLanguageAndUnit(byte value);
-    TemperatureReadingValues getTemperatureReading();
-    void setTemperatureReading(TemperatureReadingValues value);
-    FuelStatValues getFuelStat();
-    void setFuelStat(FuelStatValues value);
+    bool getFromLanguageBitOnPosition(byte position);
+    TemperatureUnitValues getTemperatureUnit();
+    void setTemperatureUnit(TemperatureUnitValues value);
+    DistanceUnitValues getDistanceUnit();
+    void setDistanceUnit(DistanceUnitValues value);
+    ConsumptionUnitValues getConsumptionUnit();
+    void setConsumptionUnit(ConsumptionUnitValues value);
+    VolumeUnitValues getVolumeUnit();
+    void setVolumeUnit(VolumeUnitValues value);
     DateTime getDateTime();
     void setDateTime(DateTime value);
+    int getDayOfYear();
+    unsigned long getSecondsFromDay();
+    int getYearsRunning();
   protected:
   private:
 };

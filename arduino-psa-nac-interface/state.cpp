@@ -92,4 +92,11 @@ void StateClass::setScrollValue(byte value) {
   scrollValue = value;
 }
 
+can_message* StateClass::getMessage15B() {
+  return message15B;
+}
+can_message* StateClass::getMessage361() {
+  return message361;
+}
+
 StateClass State;

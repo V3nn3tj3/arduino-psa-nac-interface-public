@@ -20,7 +20,7 @@
 class InputClass {
   public:
     InputClass();
-    static void process();
+    void process();
   protected:
   private:
 };

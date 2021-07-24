@@ -17,19 +17,15 @@
 #ifndef CANMESSAGE_H_
 #define CANMESSAGE_H_
 
-#include <stdint.h>
+#include <mcp2515.h>
 
-typedef unsigned char __u8;
-typedef unsigned short __u16;
-typedef unsigned long __u32;
-
-#define CAN_MAX_DLC 8
-#define CAN_MAX_DLEN 8
-
-struct can_message {
-  long  id;
-  byte  len;
-  int  data[CAN_MAX_DLEN] __attribute__((aligned(8)));
+struct can_message : can_frame {
+  can_message()
+  {
+    for (int i = 0; i < 8; i++) {
+      data[i] = 0x00;
+    }
+  }
 
   bool getFromByteBitOnPosition(byte byteNumber, byte position) {
     return (data[byteNumber] >> position) & 0x1;
@@ -41,6 +37,11 @@ struct can_message {
     } else {
       data[byteNumber] &= ~(1 << position);
     }
+  }
+
+  int getFromByteBitsStartingFromFor(byte byteNumber, byte startposition, int length)
+  {
+    return (((1 << length) - 1) & (data[byteNumber] >> (startposition - 1)));
   }
 };
 

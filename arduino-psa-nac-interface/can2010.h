@@ -17,19 +17,24 @@
 #ifndef CAN2010_H
 #define CAN2010_H
 
-#include <CAN.h>
+#include <mcp2515.h>
 #include "canmessage.h"
 
 class Can2010Class {
   public:
     void receive();
+    void setupCan();
     void send(can_message *message);
     void send0x228();
     void send0x3f6();
+    void send0x525();
+    void send0x167();
+    void send0x15B();
     Can2010Class();
+    void setupVersion();
   protected:
   private:
-    MCP2515Class CAN2;
+    MCP2515* CAN2;
     void process(can_message *message);
 };
 

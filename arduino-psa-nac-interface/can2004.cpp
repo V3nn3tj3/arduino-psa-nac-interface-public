@@ -18,79 +18,69 @@
 #include "canmessage.h"
 #include "configuration.h"
 #include "state.h"
-#include <CAN.h>
 #include <DS3232RTC.h>
+#include <mcp2515.h>
 
 Can2004Class::Can2004Class() {
-  CAN1.setPins(CS_PIN_CAN1, 2);
-  CAN1.setClockFrequency(CAN_FREQ);
-  CAN1.begin(CAN_SPEED);
+}
+
+void Can2004Class::setupCan() {
+#if SERIAL_ENABLED_CAN
+  Serial.println(F("Initialize CAN 2004"));
+#endif
+  CAN1 = new MCP2515(CS_PIN_CAN1);
+  CAN1->reset();
+  CAN1->setBitrate(CAN_SPEED, CAN_FREQ);
+  while (CAN1->setNormalMode() != MCP2515::ERROR_OK) {
+    delay(100);
+  }
 }
 
 void Can2004Class::send(can_message *message) {
-  if (message->len > 0) {
-    CAN1.beginPacket(message->id, message->len);// or CAN.beginExtendedPacket(0x18db33f1, 8);
-    for (int i = 0; i < message->len; i++) {
-      CAN1.write(message->data[i]);
-    }
-    CAN1.endPacket();
-  }
+  CAN1->sendMessage(message);
 #if SERIAL_ENABLED
-  Serial.print("CAN2004 SEND    FRAME:ID=");
-  char tmp[4];
-  snprintf(tmp, 4, "%03X", message->id);
-  Serial.print(tmp);
-  Serial.print(":LEN=");
-  Serial.print(message->len);
-  for (int i = 0; i < message->len; i++) {
-    Serial.print(":");
-    snprintf(tmp, 3, "%02X", message->data[i]);
+  if (message->can_id == 260) {
+    Serial.print(F("CAN2004 SEND    FRAME:ID="));
+    char tmp[4];
+    snprintf(tmp, 4, "%03X", message->can_id);
     Serial.print(tmp);
+    Serial.print(F(":LEN="));
+    Serial.print(message->can_dlc);
+    for (int i = 0; i < message->can_dlc; i++) {
+      Serial.print(F(":"));
+      snprintf(tmp, 3, "%02X", message->data[i]);
+      Serial.print(tmp);
+    }
+    Serial.println();
   }
-  Serial.println();
 #endif
 }
 
 void Can2004Class::receive() {
-  int packetSize = CAN1.parsePacket();
-
-  if (packetSize && packetSize <= 8) {
-    struct can_message message;
-
-    message.id = CAN1.packetId();
-    if (!CAN1.packetRtr()) {
-      message.len = packetSize;
-      byte packetIndex = 0;
-      while (CAN1.available()) {
-        message.data[packetIndex++] = CAN1.read();
-      }
+  struct can_message message;
+  if (CAN1->readMessage(&message) == MCP2515::ERROR_OK) {
+    process(&message);
 #if SERIAL_ENABLED
-      Serial.print("CAN2004 RECEIVE FRAME:ID=");
-      Serial.print(message.id);
-      Serial.print(":LEN=");
-      Serial.print(message.len);
-      char tmp[3];
-      for (int i = 0; i < message.len; i++) {
-        Serial.print(":");
+    if (message.can_id == 0x260) {
+      Serial.print(F("CAN2004 RECEIVE FRAME:ID="));
+      char tmp[4];
+      snprintf(tmp, 4, "%03X", message.can_id);
+      Serial.print(tmp);
+      Serial.print(F(":LEN="));
+      Serial.print(message.can_dlc);
+      for (int i = 0; i < message.can_dlc; i++) {
+        Serial.print(F(":"));
         snprintf(tmp, 3, "%02X", message.data[i]);
         Serial.print(tmp);
       }
       Serial.println();
-#endif
-      process(&message);
     }
-#if SERIAL_ENABLED
-  } else if (packetSize) {
-    Serial.print("CAN2004 RECEIVE FRAME::ID=");
-    Serial.print(CAN1.packetId());
-    Serial.println(":WRONG PACKET");
 #endif
   }
 }
 
 void Can2004Class::process(can_message *message) {
-  switch (message->id) {
-    //Economy mode detection
+  switch (message->can_id) {
     case 0x36: {
         //if (message->data[2] >= 0x80) {
         if (message->getFromByteBitOnPosition(2, 7)) {
@@ -113,8 +103,8 @@ void Can2004Class::process(can_message *message) {
 #if defined(EmulateVIN)
     case 0x336: {
         struct can_message new_message;
-        new_message.id = message->id;
-        new_message.len = 3;
+        new_message.can_id = message->can_id;
+        new_message.can_dlc = 3;
         new_message.data[0] = Configuration.getVINNumberChar(0); //V
         new_message.data[1] = Configuration.getVINNumberChar(1); //F
         new_message.data[2] = Configuration.getVINNumberChar(2); //3
@@ -122,8 +112,8 @@ void Can2004Class::process(can_message *message) {
       } break;
     case 0x3b6: {
         struct can_message new_message;
-        new_message.id = message->id;
-        new_message.len = 6;
+        new_message.can_id = message->can_id;
+        new_message.can_dlc = 6;
         new_message.data[0] = Configuration.getVINNumberChar(3); //
         new_message.data[1] = Configuration.getVINNumberChar(4); //
         new_message.data[2] = Configuration.getVINNumberChar(5); //
@@ -134,8 +124,8 @@ void Can2004Class::process(can_message *message) {
       } break;
     case 0x2b6: {
         struct can_message new_message;
-        new_message.id = message->id;
-        new_message.len = 8;
+        new_message.can_id = message->can_id;
+        new_message.can_dlc = 8;
         new_message.data[0] = Configuration.getVINNumberChar(9); //
         new_message.data[1] = Configuration.getVINNumberChar(10); //
         new_message.data[2] = Configuration.getVINNumberChar(11); //
@@ -201,9 +191,9 @@ void Can2004Class::process(can_message *message) {
           new_message.data[5] = fanSpeed;
           new_message.data[6] = fanPosition;
           new_message.data[7] = 0x00;
-          new_message.id = 0x350;
-          new_message.len = 8;
-          Can2010.send(message);
+          new_message.can_id = 0x350;
+          new_message.can_dlc = 8;
+          Can2010.send(&new_message);
         }
       } break;
     //Ignition detection + temperature save
@@ -233,8 +223,8 @@ void Can2004Class::process(can_message *message) {
         new_message.data[5] = message->data[5]; // Investigation to do
         new_message.data[6] = message->data[6];
         new_message.data[7] = message->data[7];
-        new_message.id = 0x168;
-        new_message.len = 8;
+        new_message.can_id = 0x168;
+        new_message.can_dlc = 8;
         Can2010.send(&new_message);
       } break;
     //Instrument cluster
@@ -251,8 +241,8 @@ void Can2004Class::process(can_message *message) {
         new_message.data[5] = 0x00; // Investigation to do
         new_message.data[6] = 0x04;
         new_message.data[7] = 0x00;
-        new_message.id = 0x168;
-        new_message.len = 8;
+        new_message.can_id = 0x168;
+        new_message.can_dlc = 8;
         Can2010.send(&new_message);
       } break;
     //Maintenance
@@ -263,8 +253,8 @@ void Can2004Class::process(can_message *message) {
         new_message.data[2] = message->data[6];
         new_message.data[3] = message->data[3];
         new_message.data[4] = message->data[4];
-        new_message.id = 0x3e7;
-        new_message.len = 5;
+        new_message.can_id = 0x3e7;
+        new_message.can_dlc = 5;
         Can2010.send(&new_message);
       } break;
     //Cruise control
@@ -280,8 +270,8 @@ void Can2004Class::process(can_message *message) {
         new_message.data[5] = 0x7f;
         new_message.data[6] = 0xff;
         new_message.data[7] = 0x98;
-        new_message.id = 0x228;
-        new_message.len = 8;
+        new_message.can_id = 0x228;
+        new_message.can_dlc = 8;
         Can2010.send(&new_message);
       } break;
     case 0x361: {
@@ -289,15 +279,21 @@ void Can2004Class::process(can_message *message) {
       } break;
     case 0x260: {
         struct can_message new_message;
-        new_message.data[0] = Configuration.getLanguageAndUnit();
+        new_message.data[0] = Configuration.getLanguageId();
+        new_message.setInByteBitOnPosition(0, 7, 1);
         new_message.data[1] = 0x1C;
 
-        if (Configuration.getTemperatureReading() == TemperatureReadingValues::F) {
-          new_message.setInByteBitOnPosition(1, 6, 1);
+        if (Configuration.getDistanceUnit() == DistanceUnitValues::mi) {
+          new_message.setInByteBitOnPosition(0, 1, 1);
         }
-
-        if (Configuration.getFuelStat() == FuelStatValues::mpgMi) {
+        if (Configuration.getVolumeUnit() == VolumeUnitValues::gal) {
           new_message.setInByteBitOnPosition(1, 7, 1);
+        }
+        if (Configuration.getConsumptionUnit() == ConsumptionUnitValues::DistanceForUnit) {
+          new_message.setInByteBitOnPosition(0, 0, 1);
+        }
+        if (Configuration.getTemperatureUnit() == TemperatureUnitValues::F) {
+          new_message.setInByteBitOnPosition(1, 6, 1);
         }
 
         new_message.data[2] = 0x00;
@@ -306,8 +302,8 @@ void Can2004Class::process(can_message *message) {
         new_message.data[5] = 0x00;
         new_message.data[6] = 0x00;
         new_message.data[7] = 0x00;
-        new_message.id = 0x260;
-        new_message.len = 7;
+        new_message.can_id = 0x260;
+        new_message.can_dlc = 7;
         Can2010.send(&new_message);
       } break;
     default:
@@ -326,25 +322,32 @@ void Can2004Class::send0x122() {
   new_message.data[5] = 0x02;
   new_message.data[6] = 0x00;
   new_message.data[7] = 0x00;
-  new_message.id = 0x122;
-  new_message.len = 8;
+  new_message.can_id = 0x122;
+  new_message.can_dlc = 8;
   Can2010.send(&new_message);
 }
 
 //Send every 1000ms - Seen on car network
 void Can2004Class::send0x169() {
   struct can_message new_message;
-  new_message.data[0] = 0x12;
-  new_message.data[1] = 0x3F;
+  new_message.data[0] = 0x00;
+  new_message.data[1] = 0xFF;
   new_message.data[2] = 0xFF;
-  new_message.data[3] = 0x3F;
+  new_message.data[3] = 0xFF;
   new_message.data[4] = 0xFF;
   new_message.data[5] = 0xFF;
   new_message.data[6] = 0xFF;
   new_message.data[7] = 0xFF;
-  new_message.id = 0x169;
-  new_message.len = 8;
+  new_message.can_id = 0x169;
+  new_message.can_dlc = 8;
   Can2010.send(&new_message);
+}
+
+//Send every 1000ms - Seen on car network
+void Can2004Class::send0x361() {
+  //if (State.getMessage361()->data[0] != 0x00) {
+  //  Can2010.send(State.getMessage361());
+  //}
 }
 
 //Send every 500ms
@@ -372,8 +375,8 @@ void Can2004Class::send0x236() {
 
   new_message.data[6] = 0xFE;
   new_message.data[7] = 0x00;
-  new_message.id = 0x236;
-  new_message.len = 8;
+  new_message.can_id = 0x236;
+  new_message.can_dlc = 8;
   Can2010.send(&new_message);
 }
 
@@ -399,8 +402,8 @@ void Can2004Class::send0x276() {
     new_message.data[5] = 0x3F;
     new_message.data[6] = 0xFE;
   }
-  new_message.id = 0x276;
-  new_message.len = 7;
+  new_message.can_id = 0x276;
+  new_message.can_dlc = 7;
   Can2010.send(&new_message);
 }
 
@@ -417,8 +420,8 @@ void Can2004Class::send0x350() {
     new_message.data[5] = 0x41; //FanSpeed
     new_message.data[6] = 0x04; //FanPosition
     new_message.data[7] = 0x00;
-    new_message.id = 0x350;
-    new_message.len = 8;
+    new_message.can_id = 0x350;
+    new_message.can_dlc = 8;
     Can2010.send(&new_message);
   }
 }

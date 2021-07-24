@@ -25,7 +25,7 @@ InputClass::InputClass() {
   pinMode(VolumeUp_PIN, INPUT_PULLUP);
 }
 
-static void InputClass::process() {
+void InputClass::process() {
   if (((millis() - State.getLastDebounceTime()) > State.getDebounceDelay())) {
     int tmpVal = 0;
     if (!digitalRead(Menu_PIN)) tmpVal += 0b001;
@@ -47,21 +47,14 @@ static void InputClass::process() {
             new_message.data[5] = 0xFF;
             new_message.data[6] = 0x00;
             new_message.data[7] = 0x00;
-            new_message.id = 0x122;
-            new_message.len = 8;
-            if (State.getButtonSendTime() == 0) {
+            new_message.can_id = 0x122;
+            new_message.can_dlc = 8;
+            if (State.getButtonSendTime() == 0 || (millis() - State.getButtonPushTime() > 800 && (millis() - State.getButtonSendTime() > 800))) {
               Can2010.send(&new_message);
               State.setLastDebounceTime(millis());
               State.setButtonSendTime(millis());
 #if SERIAL_ENABLED
-              Serial.println("Send Menu");
-#endif
-            } else if (millis() - State.getButtonPushTime() > 800 && ((millis() - State.getButtonPushTime() < 2000 && millis() - State.getButtonSendTime() > 600) || (millis() - State.getButtonPushTime() > 2000 && millis() - State.getButtonSendTime() > 350))) {
-              Can2010.send(&new_message);
-              State.setButtonSendTime(millis());
-              State.setLastDebounceTime(millis());
-#if SERIAL_ENABLED
-              Serial.println("Send Menu");
+              Serial.println(F("Send Menu"));
 #endif
             }
           } break;
@@ -70,21 +63,14 @@ static void InputClass::process() {
             new_message.data[0] = 0x04; //Volume down
             new_message.data[1] = State.getScrollValue();
             new_message.data[2] = 0x00;
-            new_message.id = 0x21F;
-            new_message.len = 3;
-            if (State.getButtonSendTime() == 0) {
+            new_message.can_id = 0x21F;
+            new_message.can_dlc = 3;
+            if (State.getButtonSendTime() == 0 || (millis() - State.getButtonPushTime() > 800 && ((millis() - State.getButtonPushTime() < 2000 && millis() - State.getButtonSendTime() > 600) || (millis() - State.getButtonPushTime() > 2000 && millis() - State.getButtonSendTime() > 350)))) {
               Can2010.send(&new_message);
               State.setLastDebounceTime(millis());
               State.setButtonSendTime(millis());
 #if SERIAL_ENABLED
-              Serial.println("Send Vol-");
-#endif
-            } else if (millis() - State.getButtonPushTime() > 800 && ((millis() - State.getButtonPushTime() < 2000 && millis() - State.getButtonSendTime() > 600) || (millis() - State.getButtonPushTime() > 2000 && millis() - State.getButtonSendTime() > 350))) {
-              Can2010.send(&new_message);
-              State.setLastDebounceTime(millis());
-              State.setButtonSendTime(millis());
-#if SERIAL_ENABLED
-              Serial.println("Send Vol-");
+              Serial.println(F("Send Vol-"));
 #endif
             }
           } break;
@@ -93,21 +79,14 @@ static void InputClass::process() {
             new_message.data[0] = 0x08; //Volume down
             new_message.data[1] = State.getScrollValue();
             new_message.data[2] = 0x00;
-            new_message.id = 0x21F;
-            new_message.len = 3;
-            if (State.getButtonSendTime() == 0) {
+            new_message.can_id = 0x21F;
+            new_message.can_dlc = 3;
+            if (State.getButtonSendTime() == 0 || (millis() - State.getButtonPushTime() > 800 && ((millis() - State.getButtonPushTime() < 2000 && millis() - State.getButtonSendTime() > 600) || (millis() - State.getButtonPushTime() > 2000 && millis() - State.getButtonSendTime() > 350)))) {
               Can2010.send(&new_message);
               State.setLastDebounceTime(millis());
               State.setButtonSendTime(millis());
 #if SERIAL_ENABLED
-              Serial.println("Send Vol+");
-#endif
-            } else if (millis() - State.getButtonPushTime() > 800 && ((millis() - State.getButtonPushTime() < 2000 && millis() - State.getButtonSendTime() > 600) || (millis() - State.getButtonPushTime() > 2000 && millis() - State.getButtonSendTime() > 350))) {
-              Can2010.send(&new_message);
-              State.setLastDebounceTime(millis());
-              State.setButtonSendTime(millis());
-#if SERIAL_ENABLED
-              Serial.println("Send Vol+");
+              Serial.println(F("Send Vol+"));
 #endif
             }
           } break;
@@ -116,14 +95,14 @@ static void InputClass::process() {
             new_message.data[0] = 0x0C; //Mute
             new_message.data[1] = State.getScrollValue();
             new_message.data[2] = 0x00;
-            new_message.id = 0x21F;
-            new_message.len = 3;
+            new_message.can_id = 0x21F;
+            new_message.can_dlc = 3;
             if (State.getButtonSendTime() == 0) {
               Can2010.send(&new_message);
               State.setLastDebounceTime(millis());
               State.setButtonSendTime(millis());
 #if SERIAL_ENABLED
-              Serial.println("Send Mute");
+              Serial.println(F("Send Mute"));
 #endif
             }
           } break;

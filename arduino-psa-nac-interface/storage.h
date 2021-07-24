@@ -19,8 +19,6 @@
 
 #include <Arduino.h>
 
-#define LanguageID 6
-
 struct DateTime {
   uint8_t Second;
   uint8_t Minute;
@@ -30,16 +28,20 @@ struct DateTime {
   unsigned int Year;
 };
 
-enum TemperatureReadingValues { C, F };
-enum FuelStatValues { Lkm, mpgMi, kmL };
+enum TemperatureUnitValues { C, F };
+enum DistanceUnitValues { km, mi };
+enum ConsumptionUnitValues { VolFor100Units, DistanceForUnit };
+enum VolumeUnitValues { l, gal };
 
 struct Storage {
   byte version;
   DateTime dateTime;
+  DateTime startDateTime;
   byte languageId;
-  byte languageAndUnit;
-  TemperatureReadingValues temperatureReading;
-  FuelStatValues fuelStat;
+  TemperatureUnitValues temperatureUnit;
+  DistanceUnitValues distanceUnit;
+  ConsumptionUnitValues consumptionUnit;
+  VolumeUnitValues volumeUnit;
 };
 
 class StorageClass {
@@ -48,14 +50,17 @@ class StorageClass {
 
     DateTime getDateTime();
     void setDateTime(DateTime value);
+    DateTime getStartDateTime();
     byte getLanguageId();
     void setLanguageId(byte value);
-    byte getLanguageAndUnit();
-    void setLanguageAndUnit(byte value);
-    TemperatureReadingValues getTemperatureReading();
-    void setTemperatureReading(TemperatureReadingValues value);
-    FuelStatValues getFuelStat();
-    void setFuelStat(FuelStatValues value);
+    TemperatureUnitValues getTemperatureUnit();
+    void setTemperatureUnit(TemperatureUnitValues value);
+    DistanceUnitValues getDistanceUnit();
+    void setDistanceUnit(DistanceUnitValues value);
+    ConsumptionUnitValues getConsumptionUnit();
+    void setConsumptionUnit(ConsumptionUnitValues value);
+    VolumeUnitValues getVolumeUnit();
+    void setVolumeUnit(VolumeUnitValues value);
   protected:
   private:
     //DateTime
