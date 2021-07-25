@@ -279,10 +279,11 @@ void Can2004Class::process(can_message *message) {
       } break;
     case 0x260: {
         struct can_message new_message;
-        new_message.data[0] = Configuration.getLanguageId();
         new_message.setInByteBitOnPosition(0, 7, 1);
-        new_message.data[1] = 0x1C;
-
+        new_message.setInByteBitOnPosition(0, 5, Configuration.getFromLanguageBitOnPosition(3));
+        new_message.setInByteBitOnPosition(0, 4, Configuration.getFromLanguageBitOnPosition(2));
+        new_message.setInByteBitOnPosition(0, 3, Configuration.getFromLanguageBitOnPosition(1));
+        new_message.setInByteBitOnPosition(0, 2, Configuration.getFromLanguageBitOnPosition(0));
         if (Configuration.getDistanceUnit() == DistanceUnitValues::mi) {
           new_message.setInByteBitOnPosition(0, 1, 1);
         }
