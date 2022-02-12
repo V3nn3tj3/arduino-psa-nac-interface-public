@@ -36,6 +36,11 @@ class Can2010Class {
   private:
     MCP2515* CAN2;
     void process(can_message *message);
+#if SERIAL_ENABLED_CAN    
+    can_frame arraycheck[40] = {};
+    int count = 0;
+#endif
+
 };
 
 extern Can2010Class Can2010;

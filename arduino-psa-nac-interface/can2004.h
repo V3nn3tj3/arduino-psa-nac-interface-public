@@ -25,12 +25,6 @@ class Can2004Class {
   private:
     MCP2515* CAN1;
     void process(can_message *message);
-
-    //Helpers
-    void getAirconTemp(can_message *message, byte &leftTemp, byte &rightTemp, bool &mono);
-    void getAirconFan(can_message *message, bool &fanOff, byte &fanSpeed);
-    void getAirconFanPosition(can_message *message, byte &fanPosition);
-    void getAirconSettings(can_message *message, bool &deMist, bool &airRecycle, bool &autoFan, bool &fanOff, bool &airConditioningON);
   protected:
   public:
     void receive();

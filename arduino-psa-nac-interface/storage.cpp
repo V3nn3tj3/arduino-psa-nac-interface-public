@@ -18,8 +18,9 @@
 
 StorageClass::StorageClass() {
   loadFromStorage();
-  if (storage.version != 4) {
-    storage = { 4, { 0, 0, 0, 1, 1, 2021}, { 0, 0, 0, 1, 1, 2020}, 6, C, km, VolFor100Units, l};
+  if (storage.version != 1) {
+    storage = { 1, { 0, 0, 0, 1, 1, 2021}, { 0, 0, 0, 1, 1, 2020}, 6, C, km, VolFor100Units, l, {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}
+    };
     saveToStorage();
   }
 }
@@ -81,6 +82,14 @@ VolumeUnitValues StorageClass::getVolumeUnit() {
 }
 void StorageClass::setVolumeUnit(VolumeUnitValues value) {
   storage.volumeUnit = value;
+  saveToStorage();
+}
+
+byte* StorageClass::getMessage15B(){
+  return storage.message15B;
+}
+void StorageClass::setMessage15B(byte data[]){
+  memcpy(storage.message15B, data, 8);
   saveToStorage();
 }
 

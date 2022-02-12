@@ -42,6 +42,7 @@ struct Storage {
   DistanceUnitValues distanceUnit;
   ConsumptionUnitValues consumptionUnit;
   VolumeUnitValues volumeUnit;
+  byte message15B[8];
 };
 
 class StorageClass {
@@ -61,6 +62,8 @@ class StorageClass {
     void setConsumptionUnit(ConsumptionUnitValues value);
     VolumeUnitValues getVolumeUnit();
     void setVolumeUnit(VolumeUnitValues value);
+    byte* getMessage15B();
+    void setMessage15B(byte data[]);
   protected:
   private:
     //DateTime

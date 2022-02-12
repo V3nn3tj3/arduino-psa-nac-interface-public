@@ -37,14 +37,18 @@ Thread* Can2004send0x236 = new Thread();
 Thread* Can2004send0x276 = new Thread();
 Thread* Can2004send0x361 = new Thread();
 
-Thread* Can2010send0x167 = new Thread();
+//Thread* Can2010send0x167 = new Thread();
 Thread* Can2010send0x228 = new Thread();
 Thread* Can2010send0x3f6 = new Thread();
 Thread* Can2010send0x525 = new Thread();
 Thread* Can2010send0x15B = new Thread();
 
+#if PassTrue
+StaticThreadController<2> controller (Can2004Threat,
+                                       Can2010Threat);
+#else
 #if HasAnalogButtons
-StaticThreadController<13> controller (InputThreat,
+StaticThreadController<12> controller (InputThreat,
                                        Can2004Threat,
                                        Can2010Threat,
                                        Can2004send0x122,
@@ -52,24 +56,25 @@ StaticThreadController<13> controller (InputThreat,
                                        Can2004send0x236,
                                        Can2004send0x276,
                                        Can2004send0x361,
-                                       Can2010send0x167,
+                                       //Can2010send0x167,
                                        Can2010send0x228,
                                        Can2010send0x3f6,
                                        Can2010send0x525,
                                        Can2010send0x15B);
 #else
-StaticThreadController<12> controller (Can2004Threat,
+StaticThreadController<11> controller (Can2004Threat,
                                        Can2010Threat,
                                        Can2004send0x122,
                                        Can2004send0x169,
                                        Can2004send0x236,
                                        Can2004send0x276,
                                        Can2004send0x361,
-                                       Can2010send0x167,
+                                       //Can2010send0x167,
                                        Can2010send0x228,
                                        Can2010send0x3f6,
                                        Can2010send0x525,
                                        Can2010send0x15B);
+#endif
 #endif
 void setup() {
 #if SERIAL_ENABLED || SERIAL_ENABLED_CAN
@@ -102,7 +107,7 @@ void setup() {
   Can2004Threat->onRun([] { Can2004.receive(); });
   Can2010Threat->enabled = true;
   Can2010Threat->onRun([] { Can2010.receive(); });
-
+#if !PassTrue
   Can2004send0x122->enabled = true;
   Can2004send0x122->setInterval(200);
   Can2004send0x122->onRun([] { Can2004.send0x122(); });
@@ -119,9 +124,9 @@ void setup() {
   Can2004send0x361->setInterval(500);
   Can2004send0x361->onRun([] { Can2004.send0x361(); });
 
-  Can2010send0x167->enabled = true;
-  Can2010send0x167->setInterval(100);
-  Can2010send0x167->onRun([] { Can2010.send0x167(); });
+  //Can2010send0x167->enabled = true;
+  //Can2010send0x167->setInterval(100);
+  //Can2010send0x167->onRun([] { Can2010.send0x167(); });
   Can2010send0x525->enabled = true;
   Can2010send0x525->setInterval(1000);
   Can2010send0x525->onRun([] { Can2010.send0x525(); });
@@ -135,6 +140,7 @@ void setup() {
   Can2010send0x15B->enabled = true;
   Can2010send0x15B->setInterval(500);
   Can2010send0x15B->onRun([] { Can2010.send0x15B(); });
+#endif
   Can2010.setupVersion();
 }
 

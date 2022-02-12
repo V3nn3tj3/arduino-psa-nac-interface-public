@@ -22,6 +22,8 @@
 struct can_message : can_frame {
   can_message()
   {
+    can_id = 0x00;
+    can_dlc = 0;
     for (int i = 0; i < 8; i++) {
       data[i] = 0x00;
     }

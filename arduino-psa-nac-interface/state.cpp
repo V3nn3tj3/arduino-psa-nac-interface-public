@@ -14,9 +14,12 @@
    along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 #include "state.h"
+#include "storage.h"
 
 StateClass::StateClass() {
-
+  message15B->can_id = 0x15B;
+  message15B->can_dlc = 8;
+  memcpy(message15B->data, Storage.getMessage15B(), 8);
 }
 
 void StateClass::setEconomyMode(bool state) {

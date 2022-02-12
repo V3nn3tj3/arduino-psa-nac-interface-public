@@ -29,6 +29,7 @@
 #define CAN_FREQ MCP_8MHZ
 
 #define EconomyModeEnabled false
+#define PassTrue false
 #define ForceBrightness false
 #define PressureUnit "Bar" //Bar, Psi
 
@@ -38,7 +39,7 @@
 #define VolumeUp_PIN 6
 
 #define EmulateVIN true
-#define VINNumber "VF3XXXXXXXXXXXXXX"
+#define VINNumber "VF7SAHNPSKWXXXXXX"
 
 class ConfigurationClass {
   public:

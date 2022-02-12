@@ -25,7 +25,7 @@ Can2004Class::Can2004Class() {
 }
 
 void Can2004Class::setupCan() {
-#if SERIAL_ENABLED_CAN
+#if SERIAL_ENABLED
   Serial.println(F("Initialize CAN 2004"));
 #endif
   CAN1 = new MCP2515(CS_PIN_CAN1);
@@ -38,8 +38,8 @@ void Can2004Class::setupCan() {
 
 void Can2004Class::send(can_message *message) {
   CAN1->sendMessage(message);
-#if SERIAL_ENABLED
-  if (message->can_id == 260) {
+#if SERIAL_ENABLED_CAN
+  if (message->can_id == 0x0e1) {
     Serial.print(F("CAN2004 SEND    FRAME:ID="));
     char tmp[4];
     snprintf(tmp, 4, "%03X", message->can_id);
@@ -60,8 +60,8 @@ void Can2004Class::receive() {
   struct can_message message;
   if (CAN1->readMessage(&message) == MCP2515::ERROR_OK) {
     process(&message);
-#if SERIAL_ENABLED
-    if (message.can_id == 0x260) {
+#if SERIAL_ENABLED_CAN
+    if (message.can_id == 0x0e1) {
       Serial.print(F("CAN2004 RECEIVE FRAME:ID="));
       char tmp[4];
       snprintf(tmp, 4, "%03X", message.can_id);
@@ -81,6 +81,11 @@ void Can2004Class::receive() {
 
 void Can2004Class::process(can_message *message) {
   switch (message->can_id) {
+    //Economy mode detection
+    case 0x1a8:
+    case 0x228:
+      {
+      } break;
     case 0x36: {
         //if (message->data[2] >= 0x80) {
         if (message->getFromByteBitOnPosition(2, 7)) {
@@ -90,14 +95,206 @@ void Can2004Class::process(can_message *message) {
         }
         Can2010.send(message);
       } break;
-    //Running engine detection
-    case 0xb6: {
-        if (message->data[0] > 0x00 || message->data[1] > 0x00) { // Engine RPM, 0x00 0x00 when the engine is OFF
+    //Ignition detection + temperature save
+    case 0x0f6: {
+        if (!message->getFromByteBitOnPosition(0, 0) && message->getFromByteBitOnPosition(0, 1)) {
           State.setEngineRunning(true);
         } else {
           State.setEngineRunning(false);
         }
+        if (message->getFromByteBitOnPosition(0, 3)) {
+          State.setIgnition(true);
+        } else {
+          State.setIgnition(false);
+        }
+
+        byte temperature = ceil(message->data[5]  / 2.0) - 40; // Temperatures can be negative but we only have 0 > 255, the new range is starting from -40°C
+        if (State.getTemperature() != temperature) {
+          State.setTemperature(temperature);
+        }
+
         Can2010.send(message);
+      } break;
+    case 0x128: {
+        struct can_message new_message;
+        new_message.data[0] = message->data[4];
+        new_message.data[1] = message->data[6];
+        new_message.data[2] = message->data[7];
+        new_message.setInByteBitOnPosition(3, 7, message->getFromByteBitOnPosition(1, 7));
+        new_message.setInByteBitOnPosition(3, 6, message->getFromByteBitOnPosition(1, 6));
+        new_message.setInByteBitOnPosition(3, 5, message->getFromByteBitOnPosition(2, 5));
+        new_message.setInByteBitOnPosition(3, 4, message->getFromByteBitOnPosition(0, 7));
+        new_message.setInByteBitOnPosition(3, 3, message->getFromByteBitOnPosition(3, 2));
+        new_message.setInByteBitOnPosition(3, 2, message->getFromByteBitOnPosition(3, 1));
+        new_message.setInByteBitOnPosition(3, 1, message->getFromByteBitOnPosition(0, 5));
+
+        new_message.setInByteBitOnPosition(4, 7, message->getFromByteBitOnPosition(0, 2));
+        new_message.setInByteBitOnPosition(4, 6, message->getFromByteBitOnPosition(1, 4));
+        new_message.setInByteBitOnPosition(4, 5, message->getFromByteBitOnPosition(3, 4));
+        new_message.setInByteBitOnPosition(4, 4, message->getFromByteBitOnPosition(3, 3));
+        new_message.setInByteBitOnPosition(4, 2, message->getFromByteBitOnPosition(2, 4));
+        new_message.setInByteBitOnPosition(4, 1, message->getFromByteBitOnPosition(2, 3));
+        new_message.setInByteBitOnPosition(4, 0, message->getFromByteBitOnPosition(2, 2));
+
+        new_message.setInByteBitOnPosition(5, 7, message->getFromByteBitOnPosition(0, 4));
+        new_message.setInByteBitOnPosition(5, 6, message->getFromByteBitOnPosition(1, 6));
+        new_message.setInByteBitOnPosition(5, 5, message->getFromByteBitOnPosition(3, 7));
+        new_message.setInByteBitOnPosition(5, 4, message->getFromByteBitOnPosition(0, 1));
+
+        new_message.setInByteBitOnPosition(6, 2, message->getFromByteBitOnPosition(5, 7));
+        new_message.setInByteBitOnPosition(6, 1, message->getFromByteBitOnPosition(2, 1));
+
+        new_message.can_id = 0x128;
+        new_message.can_dlc = 8;
+        Can2010.send(&new_message);
+      } break;
+    case 0x168: {
+        struct can_message new_message;
+        new_message.setInByteBitOnPosition(0, 7, message->getFromByteBitOnPosition(0, 7));
+        new_message.setInByteBitOnPosition(0, 5, message->getFromByteBitOnPosition(0, 5));
+        new_message.setInByteBitOnPosition(0, 4, message->getFromByteBitOnPosition(0, 4));
+        new_message.setInByteBitOnPosition(0, 3, message->getFromByteBitOnPosition(0, 3));
+        new_message.setInByteBitOnPosition(0, 2, message->getFromByteBitOnPosition(0, 2));
+
+        new_message.setInByteBitOnPosition(1, 7, message->getFromByteBitOnPosition(1, 7));
+        new_message.setInByteBitOnPosition(1, 6, message->getFromByteBitOnPosition(1, 6));
+        new_message.setInByteBitOnPosition(1, 5, message->getFromByteBitOnPosition(4, 4));
+
+        new_message.setInByteBitOnPosition(2, 3, message->getFromByteBitOnPosition(3, 7));
+        new_message.setInByteBitOnPosition(2, 2, message->getFromByteBitOnPosition(3, 6));
+        new_message.setInByteBitOnPosition(2, 1, message->getFromByteBitOnPosition(3, 4));
+        new_message.setInByteBitOnPosition(2, 0, message->getFromByteBitOnPosition(4, 1));
+
+        new_message.setInByteBitOnPosition(3, 6, message->getFromByteBitOnPosition(6, 3));
+        new_message.setInByteBitOnPosition(3, 5, message->getFromByteBitOnPosition(3, 5));
+        new_message.setInByteBitOnPosition(3, 4, message->getFromByteBitOnPosition(3, 4));
+        new_message.setInByteBitOnPosition(3, 3, message->getFromByteBitOnPosition(3, 3));
+        new_message.setInByteBitOnPosition(3, 2, message->getFromByteBitOnPosition(3, 2));
+        new_message.setInByteBitOnPosition(3, 1, message->getFromByteBitOnPosition(3, 1));
+
+        new_message.setInByteBitOnPosition(4, 7, message->getFromByteBitOnPosition(3, 0));
+        new_message.setInByteBitOnPosition(4, 6, message->getFromByteBitOnPosition(5, 2));
+        new_message.setInByteBitOnPosition(4, 5, message->getFromByteBitOnPosition(4, 5));
+        new_message.setInByteBitOnPosition(4, 2, message->getFromByteBitOnPosition(6, 5));
+
+        new_message.can_id = 0x168;
+        new_message.can_dlc = 8;
+        Can2010.send(&new_message);
+      } break;
+    //Cruise control
+    /*case 0x1a8: { //UNSURE
+      Can2010.send(message);
+
+      struct can_message new_message;
+      new_message.data[0] = message->data[1];
+      new_message.data[1] = message->data[2];
+      new_message.data[2] = message->data[0];
+      new_message.data[3] = 0x80;
+      new_message.data[4] = 0x14;
+      new_message.data[5] = 0x7f;
+      new_message.data[6] = 0xff;
+      new_message.data[7] = 0x98;
+      new_message.can_id = 0x228;
+      new_message.can_dlc = 8;
+      Can2010.send(&new_message);
+      } break;*/
+    case 0x1d0: {
+        //if (State.getEngineRunning()) {
+        struct can_message new_message;
+
+        new_message.setInByteBitOnPosition(0, 5, message->getFromByteBitOnPosition(0, 6));
+        new_message.setInByteBitOnPosition(0, 3, message->getFromByteBitOnPosition(0, 1));
+        new_message.setInByteBitOnPosition(0, 2, message->getFromByteBitOnPosition(0, 0));
+        new_message.setInByteBitOnPosition(0, 0, 1);
+
+        new_message.setInByteBitOnPosition(3, 4, message->getFromByteBitOnPosition(5, 4));
+        new_message.setInByteBitOnPosition(3, 3, message->getFromByteBitOnPosition(5, 3));
+        new_message.setInByteBitOnPosition(3, 2, message->getFromByteBitOnPosition(5, 2));
+        new_message.setInByteBitOnPosition(3, 1, message->getFromByteBitOnPosition(5, 1));
+        new_message.setInByteBitOnPosition(3, 0, message->getFromByteBitOnPosition(5, 0));
+
+        new_message.setInByteBitOnPosition(4, 4, message->getFromByteBitOnPosition(6, 4));
+        new_message.setInByteBitOnPosition(4, 3, message->getFromByteBitOnPosition(6, 3));
+        new_message.setInByteBitOnPosition(4, 2, message->getFromByteBitOnPosition(6, 2));
+        new_message.setInByteBitOnPosition(4, 1, message->getFromByteBitOnPosition(6, 1));
+        new_message.setInByteBitOnPosition(4, 0, message->getFromByteBitOnPosition(6, 0));
+
+        new_message.setInByteBitOnPosition(5, 6, message->getFromByteBitOnPosition(4, 6));
+        new_message.setInByteBitOnPosition(5, 5, message->getFromByteBitOnPosition(4, 5));
+        new_message.setInByteBitOnPosition(5, 4, message->getFromByteBitOnPosition(4, 4));
+
+        if (message->getFromByteBitOnPosition(0, 5)) {
+          message->data[2] = 0x00;
+        } else {
+          if (message->data[2] == 0x0F) {
+            message->data[2] = 0x01;
+          } else {
+            message->data[2] = message->data[2] + 0x02;
+          }
+        }
+
+        new_message.setInByteBitOnPosition(5, 3, message->getFromByteBitOnPosition(2, 3));
+        new_message.setInByteBitOnPosition(5, 2, message->getFromByteBitOnPosition(2, 2));
+        new_message.setInByteBitOnPosition(5, 1, message->getFromByteBitOnPosition(2, 1));
+        new_message.setInByteBitOnPosition(5, 0, message->getFromByteBitOnPosition(2, 0));
+
+        new_message.setInByteBitOnPosition(6, 7, message->getFromByteBitOnPosition(3, 7));
+        new_message.setInByteBitOnPosition(6, 6, message->getFromByteBitOnPosition(3, 6));
+        new_message.setInByteBitOnPosition(6, 5, message->getFromByteBitOnPosition(3, 5));
+        new_message.setInByteBitOnPosition(6, 4, message->getFromByteBitOnPosition(3, 4));
+        new_message.setInByteBitOnPosition(6, 3, message->getFromByteBitOnPosition(3, 3));
+        new_message.setInByteBitOnPosition(6, 2, message->getFromByteBitOnPosition(3, 2));
+        new_message.setInByteBitOnPosition(6, 1, message->getFromByteBitOnPosition(3, 1));
+        new_message.setInByteBitOnPosition(6, 0, message->getFromByteBitOnPosition(3, 0));
+
+        new_message.can_id = 0x350;
+        new_message.can_dlc = 8;
+        Can2010.send(&new_message);
+        //}
+      } break;
+    case 0x1e1: {
+        message->can_dlc = 4;
+        Can2010.send(message);
+      } break;
+    case 0x21f: {
+        State.setScrollValue(message->data[1]);
+        Can2010.send(message);
+      } break;
+    case 0x220: {
+        message->can_dlc = 5;
+        message->data[0] = 0x00;
+        message->data[1] = 0x00;
+        message->data[2] = 0x00;
+        message->data[3] = 0x00;
+        message->data[4] = 0x00;
+        Can2010.send(message);
+      } break;
+    case 0x261: {
+        message->can_dlc = 7;
+        message->data[6] = 0x00;
+        message->data[7] = 0x00;
+        Can2010.send(message);
+      } break;
+    case 0x2a1: {
+        message->can_dlc = 7;
+        message->data[6] = 0x00;
+        message->data[7] = 0x00;
+        Can2010.send(message);
+      } break;
+    case 0x2e1: {
+        message->can_dlc = 5;
+        message->data[3] = 0x00;
+        message->data[4] = 0x00;
+        Can2010.send(message);
+      } break;
+    case 0x3a7: {
+        Can2010.send(message);
+        struct can_message new_message;
+        new_message.data[2] = message->data[6];
+        new_message.data[4] = message->data[4];
+        new_message.can_id = 0x3e7;
+        new_message.can_dlc = 5;
+        Can2010.send(&new_message);
       } break;
       //Emulate VIN
 #if defined(EmulateVIN)
@@ -137,175 +334,113 @@ void Can2004Class::process(can_message *message) {
         Can2010.send(&new_message);
       } break;
 #endif
-    //Stalk control
-    case 0x21f: {
-        State.setScrollValue(message->data[1]);
-        Can2010.send(message);
-      } break;
-    //Aircon
-    case 0x1d0: {
-        if (State.getEngineRunning()) {
-          struct can_message new_message;
-          byte leftTemp = 0;
-          byte rightTemp = 0;
-          bool mono = false;
-          bool fanOff = false;
-          byte fanSpeed = 0;
-          bool deMist = false;
-          bool airRecycle = false;
-          bool autoFan = false;
-          bool airConditioningON = false;
-
-          byte fanPosition = 0;
-
-          getAirconTemp(message, leftTemp, rightTemp, mono);
-          getAirconFan(message, fanOff, fanSpeed);
-          getAirconFanPosition(message, fanPosition);
-          getAirconSettings(message, deMist, airRecycle, autoFan, fanOff, airConditioningON);
-
-          if (deMist) {
-            fanSpeed = 0x10;
-            fanPosition = fanPosition + 16;
-          } else if (autoFan) {
-            fanSpeed = 0x10;
-          }
-
-          if (fanOff) {
-            airConditioningON = false;
-            fanSpeed = 0x41;
-            leftTemp = 0x00;
-            rightTemp = 0x00;
-            fanPosition = 0x04;
-          }
-
-          if (airConditioningON) {
-            new_message.data[0] = 0x01; // A/C ON - Auto Soft : "00" / Auto Normal "01" / Auto Fast "02"
-          } else {
-            new_message.data[0] = 0x09; // A/C OFF - Auto Soft : "08" / Auto Normal "09" / Auto Fast "0A"
-          }
-
-          new_message.data[1] = 0x00;
-          new_message.data[2] = 0x00;
-          new_message.data[3] = leftTemp;
-          new_message.data[4] = rightTemp;
-          new_message.data[5] = fanSpeed;
-          new_message.data[6] = fanPosition;
-          new_message.data[7] = 0x00;
-          new_message.can_id = 0x350;
-          new_message.can_dlc = 8;
-          Can2010.send(&new_message);
-        }
-      } break;
-    //Ignition detection + temperature save
-    case 0x0f6: {
-        //if (message->data[0] > 0x80) {
-        if (message->getFromByteBitOnPosition(0, 3)) {
-          State.setIgnition(true);
-        } else {
-          State.setIgnition(false);
-        }
-
-        byte temperature = ceil(message->data[5]  / 2.0) - 40; // Temperatures can be negative but we only have 0 > 255, the new range is starting from -40°C
-        if (State.getTemperature() != temperature) {
-          State.setTemperature(temperature);
-        }
-
-        Can2010.send(message);
-      } break;
-    //Instrument cluster
-    case 0x168: {
-        struct can_message new_message;
-        new_message.data[0] = message->data[0];
-        new_message.data[1] = message->data[1];
-        new_message.data[2] = message->data[5]; // Investigation to do
-        new_message.data[3] = message->data[3];
-        new_message.data[4] = message->data[5]; // Investigation to do
-        new_message.data[5] = message->data[5]; // Investigation to do
-        new_message.data[6] = message->data[6];
-        new_message.data[7] = message->data[7];
-        new_message.can_id = 0x168;
-        new_message.can_dlc = 8;
-        Can2010.send(&new_message);
-      } break;
-    //Instrument cluster
-    case 0x128: {
-        struct can_message new_message;
-        new_message.data[0] = message->data[4];
-        new_message.data[1] = message->data[6];
-        new_message.data[2] = message->data[7];
-        new_message.data[3] = 0x00;
-        if (message->getFromByteBitOnPosition(0, 5)) { //Handbrake
-          new_message.setInByteBitOnPosition(3, 1, 1);
-        }
-        new_message.data[4] = 0x00; // Investigation to do
-        new_message.data[5] = 0x00; // Investigation to do
-        new_message.data[6] = 0x04;
-        new_message.data[7] = 0x00;
-        new_message.can_id = 0x168;
-        new_message.can_dlc = 8;
-        Can2010.send(&new_message);
-      } break;
-    //Maintenance
-    case 0x3a7: {
-        struct can_message new_message;
-        new_message.data[0] = 0x40;
-        new_message.data[1] = message->data[5];
-        new_message.data[2] = message->data[6];
-        new_message.data[3] = message->data[3];
-        new_message.data[4] = message->data[4];
-        new_message.can_id = 0x3e7;
-        new_message.can_dlc = 5;
-        Can2010.send(&new_message);
-      } break;
-    //Cruise control
-    case 0x1a8: {
-        Can2010.send(message);
-
-        struct can_message new_message;
-        new_message.data[0] = message->data[1];
-        new_message.data[1] = message->data[2];
-        new_message.data[2] = message->data[0];
-        new_message.data[3] = 0x80;
-        new_message.data[4] = 0x14;
-        new_message.data[5] = 0x7f;
-        new_message.data[6] = 0xff;
-        new_message.data[7] = 0x98;
-        new_message.can_id = 0x228;
-        new_message.can_dlc = 8;
-        Can2010.send(&new_message);
-      } break;
     case 0x361: {
+        if (!message->getFromByteBitOnPosition(0, 3) && (message->data[1] != 0x00 || message->data[2] != 0x00 || message->data[3] != 0x00)) {
+          State.getMessage361()->setInByteBitOnPosition(0, 7, 1);
+          State.getMessage361()->setInByteBitOnPosition(0, 6, message->getFromByteBitOnPosition(2, 3));
+          State.getMessage361()->setInByteBitOnPosition(0, 5, 0);
+          State.getMessage361()->setInByteBitOnPosition(0, 4, message->getFromByteBitOnPosition(3, 7));
+          State.getMessage361()->setInByteBitOnPosition(0, 3, message->getFromByteBitOnPosition(4, 1));
+          State.getMessage361()->setInByteBitOnPosition(0, 2, message->getFromByteBitOnPosition(4, 2));
+          State.getMessage361()->setInByteBitOnPosition(0, 1, message->getFromByteBitOnPosition(2, 0));
+          State.getMessage361()->setInByteBitOnPosition(0, 0, message->getFromByteBitOnPosition(3, 6));
+
+          State.getMessage361()->setInByteBitOnPosition(1, 7, message->getFromByteBitOnPosition(5, 5));
+          State.getMessage361()->setInByteBitOnPosition(1, 6, message->getFromByteBitOnPosition(3, 5));
+          State.getMessage361()->setInByteBitOnPosition(1, 5, message->getFromByteBitOnPosition(2, 4));
+          State.getMessage361()->setInByteBitOnPosition(1, 4, message->getFromByteBitOnPosition(1, 2));
+          State.getMessage361()->setInByteBitOnPosition(1, 3, message->getFromByteBitOnPosition(2, 6));
+          State.getMessage361()->setInByteBitOnPosition(1, 2, message->getFromByteBitOnPosition(2, 0));
+          State.getMessage361()->setInByteBitOnPosition(1, 1, message->getFromByteBitOnPosition(2, 7));
+          //new_message.setInByteBitOnPosition(1, 0, message->getFromByteBitOnPosition(2, 3));
+
+          //new_message.setInByteBitOnPosition(2, 7, message->getFromByteBitOnPosition(2, 3));
+          //new_message.setInByteBitOnPosition(2, 6, message->getFromByteBitOnPosition(2, 3));
+          State.getMessage361()->setInByteBitOnPosition(2, 5, message->getFromByteBitOnPosition(1, 4));
+          State.getMessage361()->setInByteBitOnPosition(2, 4, message->getFromByteBitOnPosition(2, 2));
+          //new_message.setInByteBitOnPosition(2, 3, message->getFromByteBitOnPosition(2, 3));
+          //new_message.setInByteBitOnPosition(2, 2, message->getFromByteBitOnPosition(2, 3));
+          //new_message.setInByteBitOnPosition(2, 1, message->getFromByteBitOnPosition(2, 3));
+          //new_message.setInByteBitOnPosition(2, 0, message->getFromByteBitOnPosition(2, 3));
+
+          //new_message.setInByteBitOnPosition(3, 7, message->getFromByteBitOnPosition(2, 3));
+          //new_message.setInByteBitOnPosition(3, 6, message->getFromByteBitOnPosition(2, 3));
+          //new_message.setInByteBitOnPosition(3, 5, message->getFromByteBitOnPosition(2, 3));
+          //new_message.setInByteBitOnPosition(3, 4, message->getFromByteBitOnPosition(2, 3));
+          //new_message.setInByteBitOnPosition(3, 3, message->getFromByteBitOnPosition(2, 3));
+          State.getMessage361()->setInByteBitOnPosition(3, 2, message->getFromByteBitOnPosition(5, 6));
+          State.getMessage361()->setInByteBitOnPosition(3, 1, message->getFromByteBitOnPosition(5, 5));
+          State.getMessage361()->setInByteBitOnPosition(3, 0, message->getFromByteBitOnPosition(5, 4));
+          State.getMessage361()->can_id = 0x361;
+          State.getMessage361()->can_dlc = 6;
+        }
+        //new_message.can_id = 0x361;
+        //new_message.can_dlc = 6;
+        //message->data[0] = 0xFF;
+        //message->data[1] = 0xFF;
+        //message->data[2] = 0xFF;
+        //message->data[3] = 0xFF;
+        //message->data[4] = 0xFF;
+        //message->data[5] = 0xFF;
+        //Can2010.send(&new_message);
+
         // Work in progress, do not forward possible old personalization settings from CAN2004
       } break;
     case 0x260: {
         struct can_message new_message;
-        new_message.setInByteBitOnPosition(0, 7, 1);
-        new_message.setInByteBitOnPosition(0, 5, Configuration.getFromLanguageBitOnPosition(3));
-        new_message.setInByteBitOnPosition(0, 4, Configuration.getFromLanguageBitOnPosition(2));
-        new_message.setInByteBitOnPosition(0, 3, Configuration.getFromLanguageBitOnPosition(1));
-        new_message.setInByteBitOnPosition(0, 2, Configuration.getFromLanguageBitOnPosition(0));
-        if (Configuration.getDistanceUnit() == DistanceUnitValues::mi) {
-          new_message.setInByteBitOnPosition(0, 1, 1);
-        }
-        if (Configuration.getVolumeUnit() == VolumeUnitValues::gal) {
-          new_message.setInByteBitOnPosition(1, 7, 1);
-        }
-        if (Configuration.getConsumptionUnit() == ConsumptionUnitValues::DistanceForUnit) {
-          new_message.setInByteBitOnPosition(0, 0, 1);
-        }
-        if (Configuration.getTemperatureUnit() == TemperatureUnitValues::F) {
-          new_message.setInByteBitOnPosition(1, 6, 1);
-        }
+        if (message->getFromByteBitOnPosition(0, 0) && !message->getFromByteBitOnPosition(0, 1)) {
+          //Serial.println(message->data[0]);
+          new_message.setInByteBitOnPosition(0, 7, 1);
+          new_message.setInByteBitOnPosition(0, 5, Configuration.getFromLanguageBitOnPosition(3));
+          new_message.setInByteBitOnPosition(0, 4, Configuration.getFromLanguageBitOnPosition(2));
+          new_message.setInByteBitOnPosition(0, 3, Configuration.getFromLanguageBitOnPosition(1));
+          new_message.setInByteBitOnPosition(0, 2, Configuration.getFromLanguageBitOnPosition(0));
+          if (Configuration.getDistanceUnit() == DistanceUnitValues::mi) {
+            new_message.setInByteBitOnPosition(0, 1, 1);
+          }
+          if (Configuration.getVolumeUnit() == VolumeUnitValues::gal) {
+            new_message.setInByteBitOnPosition(1, 7, 1);
+          }
+          if (Configuration.getConsumptionUnit() == ConsumptionUnitValues::DistanceForUnit) {
+            new_message.setInByteBitOnPosition(0, 0, 1);
+          }
+          if (Configuration.getTemperatureUnit() == TemperatureUnitValues::F) {
+            new_message.setInByteBitOnPosition(1, 6, 1);
+          }
+          //new_message.data[6] = Configuration.getLanguageId();
 
-        new_message.data[2] = 0x00;
-        new_message.data[3] = 0x00;
-        new_message.data[4] = 0x00;
-        new_message.data[5] = 0x00;
-        new_message.data[6] = 0x00;
-        new_message.data[7] = 0x00;
-        new_message.can_id = 0x260;
-        new_message.can_dlc = 7;
-        Can2010.send(&new_message);
+          new_message.setInByteBitOnPosition(1, 2, 1);
+
+          new_message.setInByteBitOnPosition(2, 7, message->getFromByteBitOnPosition(1, 0));
+          new_message.setInByteBitOnPosition(2, 6, message->getFromByteBitOnPosition(1, 7));
+          new_message.setInByteBitOnPosition(2, 5, message->getFromByteBitOnPosition(1, 4));
+          new_message.setInByteBitOnPosition(2, 4, message->getFromByteBitOnPosition(1, 5));
+          new_message.setInByteBitOnPosition(2, 3, message->getFromByteBitOnPosition(1, 1));
+          new_message.setInByteBitOnPosition(2, 2, message->getFromByteBitOnPosition(2, 7));
+          new_message.setInByteBitOnPosition(2, 1, message->getFromByteBitOnPosition(3, 6));
+          new_message.setInByteBitOnPosition(2, 0, message->getFromByteBitOnPosition(3, 7));
+
+          new_message.setInByteBitOnPosition(3, 7, message->getFromByteBitOnPosition(2, 5));
+          new_message.setInByteBitOnPosition(3, 6, message->getFromByteBitOnPosition(2, 1));
+          new_message.setInByteBitOnPosition(3, 5, message->getFromByteBitOnPosition(2, 0));
+          new_message.setInByteBitOnPosition(3, 4, message->getFromByteBitOnPosition(2, 6));
+          new_message.setInByteBitOnPosition(3, 0, message->getFromByteBitOnPosition(2, 4));
+
+          new_message.setInByteBitOnPosition(4, 7, message->getFromByteBitOnPosition(5, 6));
+          new_message.setInByteBitOnPosition(4, 6, message->getFromByteBitOnPosition(6, 5));
+          new_message.setInByteBitOnPosition(4, 5, message->getFromByteBitOnPosition(5, 4));
+          new_message.setInByteBitOnPosition(4, 3, message->getFromByteBitOnPosition(7, 7));
+          new_message.setInByteBitOnPosition(4, 2, message->getFromByteBitOnPosition(7, 6));
+          new_message.setInByteBitOnPosition(4, 1, message->getFromByteBitOnPosition(7, 5));
+          new_message.setInByteBitOnPosition(4, 0, message->getFromByteBitOnPosition(7, 4));
+
+          new_message.setInByteBitOnPosition(5, 1, 0);//message->getFromByteBitOnPosition(0, 1));
+          new_message.setInByteBitOnPosition(5, 0, 0);//message->getFromByteBitOnPosition(0, 0));
+
+          new_message.can_id = 0x260;
+          new_message.can_dlc = 8;
+          Can2010.send(&new_message);
+        }
       } break;
     default:
       Can2010.send(message);
@@ -346,9 +481,9 @@ void Can2004Class::send0x169() {
 
 //Send every 1000ms - Seen on car network
 void Can2004Class::send0x361() {
-  //if (State.getMessage361()->data[0] != 0x00) {
-  //  Can2010.send(State.getMessage361());
-  //}
+  if (State.getMessage361()->can_id == 0x361 && State.getMessage361()->data[0] != 0x00) {
+    Can2010.send(State.getMessage361());
+  }
 }
 
 //Send every 500ms
@@ -388,6 +523,7 @@ void Can2004Class::send0x276() {
 
   if (timeStatus() == timeSet) {
     new_message.data[0] = (year() - 1872); // Year would not fit inside one byte (0 > 255), substract 1872 and you get this new range (1872 > 2127)
+    new_message.setInByteBitOnPosition(0, 7, 1);
     new_message.data[1] = month();
     new_message.data[2] = day();
     new_message.data[3] = hour();
@@ -406,163 +542,6 @@ void Can2004Class::send0x276() {
   new_message.can_id = 0x276;
   new_message.can_dlc = 7;
   Can2010.send(&new_message);
-}
-
-//Send every 500ms
-void Can2004Class::send0x350() {
-  if (!State.getEngineRunning()) {
-    struct can_message new_message;
-
-    new_message.data[0] = 0x09;
-    new_message.data[1] = 0x00;
-    new_message.data[2] = 0x00;
-    new_message.data[3] = 0x00; //LeftTemp
-    new_message.data[4] = 0x00; //RightTemp
-    new_message.data[5] = 0x41; //FanSpeed
-    new_message.data[6] = 0x04; //FanPosition
-    new_message.data[7] = 0x00;
-    new_message.can_id = 0x350;
-    new_message.can_dlc = 8;
-    Can2010.send(&new_message);
-  }
-}
-
-//Helpers
-void Can2004Class::getAirconTemp(can_message *message, byte &leftTemp, byte &rightTemp, bool &mono) {
-  leftTemp = message->data[5];
-  rightTemp = message->data[6];
-  if (leftTemp == rightTemp) { // No other way to detect MONO mode
-    mono = true;
-    leftTemp += 64;
-  }
-}
-
-void Can2004Class::getAirconFan(can_message *message, bool &fanOff, byte &fanSpeed) {
-  // Fan Speed BSI_2010 = "41" (Off) > "49" (Full speed)
-  if (message->data[2] == 15) {
-    fanOff = true;
-    fanSpeed = 0x41;
-  } else {
-    fanSpeed = (message->data[2] + 66);
-  }
-}
-void Can2004Class::getAirconFanPosition(can_message *message, byte &fanPosition) {
-  bool footwellFan = false;
-  bool windscreenFan = false;
-  bool centralFan = false;
-  switch (message->data[3]) {
-    case 0x40:
-      footwellFan = false;
-      windscreenFan = true;
-      centralFan = false;
-      break;
-    case 0x30:
-      footwellFan = false;
-      windscreenFan = false;
-      centralFan = true;
-      break;
-    case 0x20:
-      footwellFan = true;
-      windscreenFan = false;
-      centralFan = false;
-      break;
-    case 0x70:
-      footwellFan = false;
-      windscreenFan = true;
-      centralFan = true;
-      break;
-    case 0x80:
-      footwellFan = true;
-      windscreenFan = true;
-      centralFan = true;
-      break;
-    case 0x50:
-      footwellFan = true;
-      windscreenFan = false;
-      centralFan = true;
-      break;
-    case 0x10:
-      footwellFan = false;
-      windscreenFan = false;
-      centralFan = false;
-      break;
-    case 0x60:
-      footwellFan = true;
-      windscreenFan = true;
-      centralFan = false;
-      break;
-    default:
-      footwellFan = false;
-      windscreenFan = false;
-      centralFan = false;
-  }
-
-  if (!footwellFan && !windscreenFan && centralFan) {
-    fanPosition = 0x34;
-  } else if (footwellFan && windscreenFan && centralFan) {
-    fanPosition = 0x84;
-  } else if (!footwellFan && windscreenFan && centralFan) {
-    fanPosition = 0x74;
-  } else if (footwellFan && !windscreenFan && centralFan) {
-    fanPosition = 0x54;
-  } else if (footwellFan && !windscreenFan && !centralFan) {
-    fanPosition = 0x24;
-  } else if (!footwellFan && windscreenFan && !centralFan) {
-    fanPosition = 0x44;
-  } else if (footwellFan && windscreenFan && !centralFan) {
-    fanPosition = 0x64;
-  } else {
-    fanPosition = 0x04; // Nothing
-  }
-}
-
-void Can2004Class::getAirconSettings(can_message *message, bool &deMist, bool &airRecycle, bool &autoFan, bool &fanOff, bool &airConditioningON) {
-  switch (message->data[4]) {
-    case 0x10:
-      deMist = true;
-      airRecycle = false;
-      break;
-    case 0x30:
-      airRecycle = true;
-      break;
-    default:
-      airRecycle = false;
-  }
-
-  switch (message->data[0]) {
-    case 0x11:
-      deMist = true;
-      airConditioningON = true;
-      fanOff = false;
-    case 0x12:
-      deMist = true;
-      airConditioningON = false;
-      fanOff = false;
-      break;
-    case 0x21:
-      deMist = true;
-      airConditioningON = true;
-      fanOff = false;
-      break;
-    case 0xa2:
-      fanOff = true;
-      airConditioningON = false;
-      break;
-    case 0x22:
-      airConditioningON = false;
-      break;
-    case 0x20:
-      airConditioningON = true;
-      break;
-    case 0x02:
-      airConditioningON = false;
-      autoFan = false;
-      break;
-    case 0x00:
-      airConditioningON = true;
-      autoFan = true;
-      break;
-  }
 }
 
 Can2004Class Can2004;
